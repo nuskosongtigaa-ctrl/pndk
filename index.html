@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foto KTS - Editor Kartu Tanda Santri</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=Philosopher:wght@700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Library untuk cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <!-- Library untuk konversi HEIC -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F0FAFA; /* Warna latar belakang yang lembut */
+        }
+        .btn {
+            background-color: #006A4E; /* Warna hijau tua dari desain */
+            color: white;
+            font-weight: bold;
+            border-radius: 9999px; /* rounded-full */
+            padding: 0.75rem 2rem;
+            transition: background-color 0.3s, transform 0.2s;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .btn:hover {
+            background-color: #00563f;
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn:active {
+            transform: translateY(-1px) scale(0.98);
+        }
+        .text-brand {
+            color: #002D21; /* Warna teks yang sangat gelap */
+        }
+        .font-philosopher {
+            font-family: 'Philosopher', sans-serif;
+        }
+        
+        /* --- Animasi --- */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animate-entry {
+            opacity: 0;
+            animation: fadeInUp 0.4s ease-out forwards; /* Durasi animasi dipersingkat */
+        }
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+        }
+
+        /* --- Modal Editor --- */
+        #editor-modal {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        #editor-container {
+            max-width: 90vw;
+            max-height: 80vh;
+        }
+        .cropper-view-box {
+            border-radius: 12px; /* Membuat area crop berujung bulat */
+            outline: 3px solid #006A4E;
+        }
+
+        /* Membuat kisi-kisi crop lebih terlihat */
+        .cropper-dashed {
+            border-color: rgba(255, 255, 255, 0.7) !important;
+            border-width: 2px !important;
+        }
+        .cropper-center {
+             width: 8px !important;
+             height: 8px !important;
+             background-color: rgba(255, 255, 255, 0.7) !important;
+        }
+
+        /* --- Animasi Loading --- */
+        .loader {
+            width: 60px;
+            aspect-ratio: 4;
+            background: radial-gradient(circle closest-side,#006A4E 90%,#0000) 0/calc(100%/3) 100% space;
+            clip-path: inset(0 100% 0 0);
+            animation: l1 1s steps(4) infinite;
+        }
+        @keyframes l1 {to{clip-path: inset(0 -34% 0 0)}}
+
+    </style>
+</head>
+<body class="text-brand">
+
+    <!-- Area Notifikasi -->
+    <div id="notification-area" class="fixed top-4 right-4 z-[100] w-full max-w-xs space-y-2"></div>
+
+    <!-- Halaman 1: Landing Page -->
+    <div id="page1" class="page min-h-screen flex flex-col justify-center items-center text-center p-4">
+        <img src="https://iili.io/KkzAuwv.png" alt="Logo" class="h-28 w-28 mb-6 animate-entry" style="animation-delay: 100ms;" border="0">
+        <h2 class="text-3xl font-bold animate-entry" style="animation-delay: 200ms;">
+            Foto<span class="bg-[#006A4E] text-white rounded-lg px-4 py-1 ml-2">KTSMU</span>
+        </h2>
+        <h1 class="text-5xl font-philosopher font-extrabold mt-2 tracking-tight animate-entry" style="animation-delay: 300ms;">Kartu Tanda Santri</h1>
+        <p class="text-xl mt-3 text-gray-600 animate-entry" style="animation-delay: 400ms;">Pondok Pesantren Miftahul Ulum</p>
+        <button id="getStartedBtn" class="btn mt-10 animate-entry" style="animation-delay: 500ms;">Getstarted</button>
+    </div>
+
+    <!-- Halaman 2: Editor Foto -->
+    <div id="page2" class="page hidden min-h-screen flex-col p-6 md:p-10">
+        <header class="flex items-center space-x-4">
+            <img src="https://iili.io/KkzAuwv.png" alt="Logo" class="h-14 w-14" border="0">
+            <div class="flex flex-col">
+                <h2 class="text-xl font-bold">
+                    Foto<span class="bg-[#006A4E] text-white rounded-md px-2 py-0.5 ml-1.5 text-lg">KTSMU</span>
+                </h2>
+                <h1 class="text-2xl font-philosopher font-extrabold tracking-tight -mt-0.5">Kartu Tanda Santri</h1>
+                <p class="text-md text-gray-600 -mt-0.5">Pondok Pesantren Miftahul Ulum</p>
+            </div>
+        </header>
+
+        <main class="flex-grow flex flex-col justify-center items-center my-8">
+            <div id="upload-area" class="w-full max-w-4xl text-center">
+                 <div class="bg-gray-200/50 rounded-2xl p-10 flex justify-center items-center h-80">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" fill="currentColor" class="bi bi-card-image text-gray-400" viewBox="0 0 16 16"><path d="M6.002 5.5a1.5 1.5 S 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/><path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2zM1 3.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5-.5h-13a.5.5 0 0 1-.5-.5z"/><path d="M10.648 7.646a.5.5 0 0 1 .577-.093l4.777 3.947V13.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-1.266l4.777-3.947a.5.5 0 0 1 .577.093z"/></svg>
+                </div>
+            </div>
+            <div id="preview-gallery" class="hidden w-full max-w-6xl grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"></div>
+            <div id="processing-indicator" class="hidden mt-4 flex flex-col items-center justify-center space-y-2">
+                <div class="loader"></div>
+                <p class="text-lg font-semibold text-gray-700">Memproses gambar...</p>
+            </div>
+        </main>
+
+        <footer class="flex justify-center items-center space-x-4 py-4">
+            <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif" class="hidden">
+            <button id="uploadBtn" class="btn">Upload Foto</button>
+            <button id="downloadBtn" class="btn" disabled>Unduh Foto</button>
+        </footer>
+    </div>
+
+    <!-- Modal untuk Editor Penyesuaian Foto -->
+    <div id="editor-modal" class="fixed inset-0 z-50 flex-col items-center justify-center hidden animate-entry">
+        <div id="editor-container" class="bg-white p-4 rounded-lg shadow-2xl flex flex-col">
+            <div class="flex-grow w-full h-full">
+                <img id="image-to-edit" class="max-w-full max-h-full">
+            </div>
+            <div class="flex justify-center items-center space-x-4 mt-4">
+                <button id="cancel-edit-btn" class="bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full">Batal</button>
+                <button id="save-edit-btn" class="btn">Simpan Perubahan</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- State Management ---
+        let processedImages = []; // Menyimpan { name, blob, originalFile }
+        let cropper = null;
+        let currentEditingFile = null;
+
+        // --- DOM Elements ---
+        const page1 = document.getElementById('page1');
+        const page2 = document.getElementById('page2');
+        const getStartedBtn = document.getElementById('getStartedBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const fileInput = document.getElementById('fileInput');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const uploadArea = document.getElementById('upload-area');
+        const previewGallery = document.getElementById('preview-gallery');
+        const processingIndicator = document.getElementById('processing-indicator');
+        const editorModal = document.getElementById('editor-modal');
+        const imageToEdit = document.getElementById('image-to-edit');
+        const cancelEditBtn = document.getElementById('cancel-edit-btn');
+        const saveEditBtn = document.getElementById('save-edit-btn');
+        const notificationArea = document.getElementById('notification-area');
+        
+        // --- Fungsi Notifikasi ---
+        function showNotification(fileName, reason) {
+            const notification = document.createElement('div');
+            notification.className = 'bg-red-500 text-white p-3 rounded-lg shadow-lg flex items-start space-x-2';
+            notification.style.animation = 'slideInRight 0.5s ease-out';
+            
+            notification.innerHTML = `
+                <div class="flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-exclamation-circle-fill" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8 4a.905.905 0 0 0-.9.995l.35 3.507a.552.552 0 0 0 1.1 0l.35-3.507A.905.905 0 0 0 8 4zm.002 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>
+                </div>
+                <div>
+                    <p class="font-bold text-sm truncate">${fileName}</p>
+                    <p class="text-xs">${reason}</p>
+                </div>
+                <button class="ml-auto flex-shrink-0 text-white opacity-70 hover:opacity-100">&times;</button>
+            `;
+            
+            notificationArea.appendChild(notification);
+
+            const closeButton = notification.querySelector('button');
+            const removeNotification = () => {
+                notification.style.animation = 'fadeOut 0.3s ease-in forwards';
+                notification.addEventListener('animationend', () => notification.remove(), { once: true });
+            };
+            
+            closeButton.onclick = removeNotification;
+            setTimeout(removeNotification, 5000); // Hapus otomatis setelah 5 detik
+        }
+
+
+        // --- Navigation ---
+        getStartedBtn.addEventListener('click', () => {
+            page1.style.transition = 'opacity 0.3s ease-out';
+            page1.style.opacity = '0';
+            page1.addEventListener('transitionend', () => {
+                page1.classList.add('hidden');
+                page2.classList.remove('hidden');
+                page2.classList.add('flex', 'animate-entry');
+            }, { once: true });
+        });
+
+        // --- File Upload & Processing ---
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', async (event) => {
+            const files = Array.from(event.target.files);
+            if (files.length === 0) return;
+
+            uploadArea.classList.add('hidden');
+            previewGallery.classList.remove('hidden');
+            processingIndicator.classList.remove('hidden');
+            downloadBtn.disabled = true;
+
+            const filesToProcess = [];
+
+            for (const file of files) {
+                try {
+                    const lowerCaseName = file.name.toLowerCase();
+                    if (lowerCaseName.endsWith('.heic') || lowerCaseName.endsWith('.heif')) {
+                        processingIndicator.querySelector('p').textContent = `Mengonversi ${file.name}...`;
+                        const convertedBlob = await heic2any({ blob: file, toType: "image/png" });
+                        const convertedFile = new File([convertedBlob], file.name.replace(/\.(heic|heif)$/i, '.png'), { type: 'image/png' });
+                        filesToProcess.push(convertedFile);
+                    } else {
+                        filesToProcess.push(file);
+                    }
+                } catch (error) {
+                    const reason = "Gagal mengonversi format HEIC.";
+                    console.error(`Gagal mengonversi file: ${file.name}`, error);
+                    showNotification(file.name, reason);
+                }
+            }
+
+            processingIndicator.querySelector('p').textContent = 'Memproses gambar...';
+            const existingImageCount = processedImages.length;
+
+            for (let i = 0; i < filesToProcess.length; i++) {
+                const file = filesToProcess[i];
+                try {
+                    await processImage(file, existingImageCount + i);
+                } catch (error) {
+                    console.error(`Gagal memproses file: ${file.name}`, error);
+                    showNotification(file.name, error.message || "Proses gagal, file mungkin rusak.");
+                }
+            }
+            
+            processingIndicator.classList.add('hidden');
+            if (processedImages.length > 0) {
+                downloadBtn.disabled = false;
+            }
+            fileInput.value = '';
+        });
+
+        async function processImage(file, index, customCanvas = null) {
+            const fileName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+            
+            const finalBlob = await new Promise((resolve, reject) => {
+                const img = new Image();
+                
+                img.onload = async () => {
+                    try {
+                        const MAX_SIZE_BYTES = 500 * 1024;
+                        let sourceCanvas;
+
+                        if (customCanvas) { 
+                            sourceCanvas = customCanvas; 
+                        } else {
+                            sourceCanvas = document.createElement('canvas');
+                            const ctx = sourceCanvas.getContext('2d');
+                            const targetAspectRatio = 3 / 4;
+                            let sX = 0, sY = 0, sW = img.width, sH = img.height;
+                            const originalAspectRatio = img.width / img.height;
+
+                            if (originalAspectRatio > targetAspectRatio) {
+                                sW = img.height * targetAspectRatio;
+                                sX = (img.width - sW) / 2;
+                            } else {
+                                sH = img.width / targetAspectRatio;
+                                sY = (img.height - sH) / 2;
+                            }
+                            sourceCanvas.width = sW;
+                            sourceCanvas.height = sH;
+                            ctx.drawImage(img, sX, sY, sW, sH, 0, 0, sW, sH);
+                        }
+
+                        const renderCanvasOptimized = async (initialWidth) => {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            let currentWidth = initialWidth;
+                            
+                            const height = currentWidth / (3 / 4);
+                            canvas.width = currentWidth;
+                            canvas.height = height;
+                            const cornerRadius = currentWidth * (25 / 300);
+
+                            ctx.beginPath();
+                            ctx.moveTo(cornerRadius, 0);
+                            ctx.lineTo(canvas.width - cornerRadius, 0);
+                            ctx.arcTo(canvas.width, 0, canvas.width, cornerRadius, cornerRadius);
+                            ctx.lineTo(canvas.width, canvas.height - cornerRadius);
+                            ctx.arcTo(canvas.width, canvas.height, canvas.width - cornerRadius, canvas.height, cornerRadius);
+                            ctx.lineTo(cornerRadius, canvas.height);
+                            ctx.arcTo(0, canvas.height, 0, canvas.height - cornerRadius, cornerRadius);
+                            ctx.lineTo(0, cornerRadius);
+                            ctx.arcTo(0, 0, cornerRadius, 0, cornerRadius);
+                            ctx.closePath();
+                            ctx.clip();
+                            ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, height);
+                            
+                            let blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+
+                            if (blob.size > MAX_SIZE_BYTES) {
+                                currentWidth = 600; 
+                                const smallerHeight = currentWidth / (3 / 4);
+                                canvas.width = currentWidth;
+                                canvas.height = smallerHeight;
+                                const smallerRadius = currentWidth * (25/300);
+                                ctx.beginPath();
+                                ctx.moveTo(smallerRadius, 0);
+                                ctx.lineTo(canvas.width - smallerRadius, 0);
+                                ctx.arcTo(canvas.width, 0, canvas.width, smallerRadius, smallerRadius);
+                                ctx.lineTo(canvas.width, canvas.height - smallerRadius);
+                                ctx.arcTo(canvas.width, canvas.height, canvas.width - smallerRadius, canvas.height, smallerRadius);
+                                ctx.lineTo(smallerRadius, canvas.height);
+                                ctx.arcTo(0, canvas.height, 0, canvas.height - smallerRadius, smallerRadius);
+                                ctx.lineTo(0, smallerRadius);
+                                ctx.arcTo(0, 0, smallerRadius, 0, smallerRadius);
+                                ctx.closePath();
+                                ctx.clip();
+                                ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, smallerHeight);
+                                blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+                            }
+                            return blob;
+                        };
+
+                        const resultBlob = await renderCanvasOptimized(800); 
+                        resolve(resultBlob);
+
+                    } catch (error) { 
+                        reject(error); 
+                    }
+                };
+
+                img.onerror = (err) => {
+                    reject(new Error(`Gagal memuat. Format tidak didukung/file rusak.`));
+                };
+                
+                if (customCanvas) {
+                    img.src = customCanvas.toDataURL();
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = (e) => {
+                        reject(new Error('Gagal membaca file.'));
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            const imageName = `${fileName}.png`;
+            const existingImageIndex = processedImages.findIndex(p => p.name === imageName);
+            if (existingImageIndex > -1) {
+                processedImages[existingImageIndex].blob = finalBlob;
+                const existingContainer = document.querySelector(`.group[data-filename="${imageName}"]`);
+                existingContainer.querySelector('img').src = URL.createObjectURL(finalBlob);
+            } else {
+                processedImages.push({ name: imageName, blob: finalBlob, originalFile: file }); 
+                const previewUrl = URL.createObjectURL(finalBlob);
+                const previewImgContainer = document.createElement('div');
+                previewImgContainer.className = 'relative aspect-[3/4] bg-gray-200 rounded-lg overflow-hidden shadow-md group animate-entry';
+                previewImgContainer.style.animationDelay = `${index * 50}ms`;
+                previewImgContainer.dataset.filename = imageName;
+                const previewImg = document.createElement('img');
+                previewImg.src = previewUrl;
+                previewImg.className = 'w-full h-full object-cover';
+                const btnContainer = document.createElement('div');
+                btnContainer.className = 'absolute top-1 right-1 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity';
+                const adjustBtn = document.createElement('button');
+                adjustBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil-fill" viewBox="0 0 16 16"><path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/></svg>`;
+                adjustBtn.className = 'bg-black/50 text-white rounded-full w-6 h-6 flex items-center justify-center';
+                adjustBtn.dataset.action = 'adjust';
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '&times;';
+                deleteBtn.className = 'bg-black/50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xl font-bold';
+                deleteBtn.dataset.action = 'delete';
+                btnContainer.appendChild(adjustBtn);
+                btnContainer.appendChild(deleteBtn);
+                previewImgContainer.appendChild(previewImg);
+                previewImgContainer.appendChild(btnContainer);
+                previewGallery.appendChild(previewImgContainer);
+            }
+        }
+        previewGallery.addEventListener('click', (event) => {
+            const button = event.target.closest('button');
+            if (!button) return;
+            const action = button.dataset.action;
+            const container = button.closest('.group');
+            const filename = container.dataset.filename;
+            if (action === 'delete') {
+                processedImages = processedImages.filter(img => img.name !== filename);
+                container.style.transition = 'opacity 0.3s, transform 0.3s';
+                container.style.opacity = '0';
+                container.style.transform = 'scale(0.9)';
+                setTimeout(() => container.remove(), 300);
+                if (processedImages.length === 0) {
+                    downloadBtn.disabled = true;
+                    uploadArea.classList.remove('hidden');
+                    previewGallery.classList.add('hidden');
+                }
+            } else if (action === 'adjust') {
+                const imageToAdjust = processedImages.find(img => img.name === filename);
+                if (imageToAdjust) { openEditor(imageToAdjust); }
+            }
+        });
+        function openEditor(imageFile) {
+            currentEditingFile = imageFile;
+            imageToEdit.src = URL.createObjectURL(imageFile.originalFile);
+            editorModal.classList.remove('hidden');
+            editorModal.classList.add('flex');
+            cropper = new Cropper(imageToEdit, { aspectRatio: 3 / 4, viewMode: 2, autoCropArea: 1, movable: true, zoomable: true, rotatable: false, scalable: false });
+        }
+        function closeEditor() {
+            if (cropper) { cropper.destroy(); cropper = null; }
+            currentEditingFile = null;
+            editorModal.classList.add('hidden');
+            editorModal.classList.remove('flex');
+        }
+        cancelEditBtn.addEventListener('click', closeEditor);
+        saveEditBtn.addEventListener('click', async () => {
+            if (!cropper || !currentEditingFile) return;
+            const fileToProcess = currentEditingFile.originalFile;
+            const croppedCanvas = cropper.getCroppedCanvas();
+            closeEditor();
+            processingIndicator.classList.remove('hidden');
+            downloadBtn.disabled = true;
+            try {
+                await processImage(fileToProcess, 0, croppedCanvas);
+            } catch (error) {
+                console.error("Gagal menyimpan perubahan:", error);
+                showNotification(fileToProcess.name, error.message || "Gagal menyimpan perubahan.");
+            }
+            processingIndicator.classList.add('hidden');
+            if (processedImages.length > 0) downloadBtn.disabled = false;
+        });
+        downloadBtn.addEventListener('click', async () => {
+            if (processedImages.length === 0) return;
+            if (processedImages.length === 1) { saveAs(processedImages[0].blob, processedImages[0].name); return; }
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = 'Menyiapkan ZIP...';
+            const zip = new JSZip();
+            processedImages.forEach(image => zip.file(image.name, image.blob));
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            saveAs(zipBlob, 'FotoKTS_Hasil.zip');
+            downloadBtn.disabled = false;
+            downloadBtn.textContent = 'Unduh Foto';
+        });
+    </script>
+</body>
+</html>
+
