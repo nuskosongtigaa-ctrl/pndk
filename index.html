@@ -267,11 +267,58 @@
             setTimeout(removeNotification, 5000); // Hapus otomatis setelah 5 detik
         }
 
+        /**
+         * Mengubah ukuran file gambar sebelum dikirim ke API untuk mempercepat transfer.
+         * @param {File} file - File gambar asli.
+         * @param {number} maxWidth - Lebar maksimum yang diinginkan.
+         * @returns {Promise<Blob>} Blob gambar dengan ukuran yang sudah disesuaikan.
+         */
+        async function resizeImageForApi(file, maxWidth = 1000) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    img.src = e.target.result;
+                };
+
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > maxWidth) {
+                        height = Math.round(height * (maxWidth / width));
+                        width = maxWidth;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Konversi canvas menjadi Blob (JPEG untuk kompresi lebih baik)
+                    canvas.toBlob(resolve, 'image/jpeg', 0.85); // Kualitas 85% untuk keseimbangan
+
+                    img.onerror = reject;
+                };
+
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
 
         // --- Fungsi Penghapus Latar Belakang (Clipdrop API) ---
         async function removeBackground(file) {
+            
+            // 1. Ubah ukuran file terlebih dahulu untuk pengiriman API yang lebih cepat
+            const resizedBlob = await resizeImageForApi(file, 1000); 
+            const resizedFile = new File([resizedBlob], file.name.split('.')[0] + '.jpeg', { type: 'image/jpeg' });
+
             const formData = new FormData();
-            formData.append('image_file', file);
+            formData.append('image_file', resizedFile); // Kirim file yang sudah diubah ukurannya
 
             try {
                 const response = await fetch('https://clipdrop-api.co/remove-background/v1', {
@@ -284,13 +331,22 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`Clipdrop API Error: ${response.status} - ${errorText}`);
+                    // Mencoba parsing error sebagai JSON jika API mengembalikannya
+                    let errorReason = `Clipdrop API Error: ${response.status}`;
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorReason += ` - ${errorJson.error || errorJson.message || errorText}`;
+                    } catch {
+                        errorReason += ` - ${errorText.substring(0, 100)}...`; // Potong pesan error jika terlalu panjang
+                    }
+                    throw new Error(errorReason);
                 }
 
                 return await response.blob();
             } catch (error) {
                 console.error("Kesalahan saat memanggil Clipdrop API:", error);
-                throw new Error("Gagal menghapus latar belakang secara otomatis.");
+                // Menampilkan pesan error yang lebih spesifik jika tersedia
+                throw new Error(error.message || "Gagal menghapus latar belakang secara otomatis.");
             }
         }
 
@@ -325,7 +381,6 @@
                     if (lowerCaseName.endsWith('.heic') || lowerCaseName.endsWith('.heif')) {
                         processingIndicator.querySelector('p').textContent = `Mengonversi ${file.name}...`;
                         const convertedBlob = await heic2any({ blob: file, toType: "image/png" });
-                        // Membuat File baru dari Blob yang sudah dikonversi
                         const convertedFile = new File([convertedBlob], file.name.replace(/\.(heic|heif)$/i, '.png'), { type: 'image/png' });
                         filesToProcess.push(convertedFile);
                     } else {
@@ -342,17 +397,18 @@
 
             for (let i = 0; i < filesToProcess.length; i++) {
                 const originalFile = filesToProcess[i];
-                let fileToProcess = originalFile;
+                let fileWithTransparentBg = null;
                 
                 try {
                     // 1. Hapus Latar Belakang
                     processingIndicator.querySelector('p').textContent = `Menghapus latar belakang ${originalFile.name}...`;
                     const blobNoBg = await removeBackground(originalFile);
-                    fileToProcess = new File([blobNoBg], originalFile.name, { type: 'image/png' });
+                    // Gunakan nama file asli (sebelum konversi atau resize)
+                    fileWithTransparentBg = new File([blobNoBg], originalFile.name, { type: 'image/png' });
 
                     // 2. Terapkan Background Color & Process Image
                     processingIndicator.querySelector('p').textContent = `Memproses dan memotong ${originalFile.name}...`;
-                    await processImage(originalFile, fileToProcess, existingImageCount + i, null, selectedBackgroundColor);
+                    await processImage(originalFile, fileWithTransparentBg, existingImageCount + i, null, selectedBackgroundColor);
 
                 } catch (error) {
                     console.error(`Gagal memproses file: ${originalFile.name}`, error);
@@ -368,7 +424,8 @@
         });
 
         async function processImage(originalFile, fileWithTransparentBg, index, customCanvas = null, bgColor = selectedBackgroundColor) {
-            const fileName = originalFile.name.substring(0, originalFile.name.lastIndexOf('.')) || originalFile.name;
+            // Perbaikan: Ganti fileName menjadi baseFileName untuk menghindari deklarasi ganda.
+            const baseFileName = originalFile.name.substring(0, originalFile.name.lastIndexOf('.')) || originalFile.name;
             
             const finalBlob = await new Promise((resolve, reject) => {
                 const img = new Image();
@@ -494,7 +551,8 @@
 
             });
 
-            const imageName = `${fileName}.png`;
+            // Perbaikan: Menggunakan baseFileName yang baru
+            const imageName = `${baseFileName}.png`;
             const existingImageIndex = processedImages.findIndex(p => p.name === imageName);
             
             const newImageState = { 
@@ -508,16 +566,17 @@
             if (existingImageIndex > -1) {
                 // Update image state
                 processedImages[existingImageIndex] = newImageState;
-                const existingContainer = document.querySelector(`.group[data-filename="${imageName}"]`);
+                const existingContainer = document.querySelector(`.group[data-filename="${newImageState.name}"]`);
                 existingContainer.querySelector('img').src = URL.createObjectURL(finalBlob);
             } else {
                 // Add new image state
+                const indexToUse = processedImages.length; // Jika baru, gunakan panjang array saat ini untuk indeks
                 processedImages.push(newImageState); 
                 const previewUrl = URL.createObjectURL(finalBlob);
                 const previewImgContainer = document.createElement('div');
                 previewImgContainer.className = 'relative aspect-[3/4] bg-gray-200 rounded-lg overflow-hidden shadow-md group animate-entry';
-                previewImgContainer.style.animationDelay = `${index * 50}ms`;
-                previewImgContainer.dataset.filename = imageName;
+                previewImgContainer.style.animationDelay = `${indexToUse * 50}ms`;
+                previewImgContainer.dataset.filename = newImageState.name;
                 const previewImg = document.createElement('img');
                 previewImg.src = previewUrl;
                 previewImg.className = 'w-full h-full object-cover';
