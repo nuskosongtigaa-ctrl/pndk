@@ -168,7 +168,7 @@
         <main class="flex-grow flex flex-col justify-center items-center my-8">
             <div id="upload-area" class="w-full max-w-4xl text-center">
                  <div class="bg-gray-200/50 rounded-2xl p-10 flex justify-center items-center h-80">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" fill="currentColor" class="bi bi-card-image text-gray-400" viewBox="0 0 16 16"><path d="M6.002 5.5a1.5 1.5 S 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/><path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2zM1 3.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5-.5h-13a.5.5 0 0 1-.5-.5z"/><path d="M10.648 7.646a.5.5 0 0 1 .577-.093l4.777 3.947V13.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-1.266l4.777-3.947a.5.5 0 0 1 .577.093z"/></svg>
+                     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" fill="currentColor" class="bi bi-card-image text-gray-400" viewBox="0 0 16 16"><path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/><path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2zM1 3.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5-.5h-13a.5.5 0 0 1-.5-.5z"/><path d="M10.648 7.646a.5.5 0 0 1 .577-.093l4.777 3.947V13.5a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-1.266l4.777-3.947a.5.5 0 0 1 .577.093z"/></svg>
                 </div>
             </div>
             <div id="preview-gallery" class="hidden w-full max-w-6xl grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"></div>
@@ -193,7 +193,7 @@
             <div class="mb-4 flex flex-col sm:flex-row items-center justify-between p-2 rounded-lg bg-gray-100/70">
                 <p class="font-semibold text-gray-700 mb-2 sm:mb-0">Pilih Warna Latar Belakang:</p>
                 <div id="color-options" class="flex space-x-3">
-                    <div id="color-green" class="color-option" style="background-color: #14A92C;" data-color="#14A92C"></div>
+                    <div id="color-green" class="color-option" style="background-color: #08CB00;" data-color="#08CB00"></div>
                     <div id="color-red" class="color-option" style="background-color: #BF092F;" data-color="#BF092F"></div>
                 </div>
             </div>
@@ -213,13 +213,14 @@
 
     <script>
         // --- Kunci API Clipdrop ---
-        const CLIPDROP_API_KEY = "034801eb1f9737986cd42bf013a06f1a32fe48e87a41b3e3a2fe9dbb9c58e20e07edeebb885b29daf1c51e08e93b8145";
+        // Kunci API yang diperbarui: 35f3409e9431a2f6ed91b9009c0adc826d36f69720bcab03f2a57e9499144e0335a790f527ddc86f898e13c3767972ab
+        const CLIPDROP_API_KEY = "35f3409e9431a2f6ed91b9009c0adc826d36f69720bcab03f2a57e9499144e0335a790f527ddc86f898e13c3767972ab";
         
         // --- State Management ---
         let processedImages = []; // Menyimpan { name, blob, originalFile, bgColor }
         let cropper = null;
         let currentEditingFile = null;
-        let selectedBackgroundColor = '#14A92C'; // Default: Hijau
+        let selectedBackgroundColor = '#08CB00'; // Default: Hijau
 
         // --- DOM Elements ---
         const page1 = document.getElementById('page1');
@@ -267,58 +268,11 @@
             setTimeout(removeNotification, 5000); // Hapus otomatis setelah 5 detik
         }
 
-        /**
-         * Mengubah ukuran file gambar sebelum dikirim ke API untuk mempercepat transfer.
-         * @param {File} file - File gambar asli.
-         * @param {number} maxWidth - Lebar maksimum yang diinginkan.
-         * @returns {Promise<Blob>} Blob gambar dengan ukuran yang sudah disesuaikan.
-         */
-        async function resizeImageForApi(file, maxWidth = 1000) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                const reader = new FileReader();
-
-                reader.onload = (e) => {
-                    img.src = e.target.result;
-                };
-
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > maxWidth) {
-                        height = Math.round(height * (maxWidth / width));
-                        width = maxWidth;
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    // Konversi canvas menjadi Blob (JPEG untuk kompresi lebih baik)
-                    canvas.toBlob(resolve, 'image/jpeg', 0.85); // Kualitas 85% untuk keseimbangan
-
-                    img.onerror = reject;
-                };
-
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
 
         // --- Fungsi Penghapus Latar Belakang (Clipdrop API) ---
         async function removeBackground(file) {
-            
-            // 1. Ubah ukuran file terlebih dahulu untuk pengiriman API yang lebih cepat
-            const resizedBlob = await resizeImageForApi(file, 1000); 
-            const resizedFile = new File([resizedBlob], file.name.split('.')[0] + '.jpeg', { type: 'image/jpeg' });
-
             const formData = new FormData();
-            formData.append('image_file', resizedFile); // Kirim file yang sudah diubah ukurannya
+            formData.append('image_file', file);
 
             try {
                 const response = await fetch('https://clipdrop-api.co/remove-background/v1', {
@@ -331,22 +285,13 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    // Mencoba parsing error sebagai JSON jika API mengembalikannya
-                    let errorReason = `Clipdrop API Error: ${response.status}`;
-                    try {
-                        const errorJson = JSON.parse(errorText);
-                        errorReason += ` - ${errorJson.error || errorJson.message || errorText}`;
-                    } catch {
-                        errorReason += ` - ${errorText.substring(0, 100)}...`; // Potong pesan error jika terlalu panjang
-                    }
-                    throw new Error(errorReason);
+                    throw new Error(`Clipdrop API Error: ${response.status} - ${errorText}`);
                 }
 
                 return await response.blob();
             } catch (error) {
                 console.error("Kesalahan saat memanggil Clipdrop API:", error);
-                // Menampilkan pesan error yang lebih spesifik jika tersedia
-                throw new Error(error.message || "Gagal menghapus latar belakang secara otomatis.");
+                throw new Error("Gagal menghapus latar belakang secara otomatis.");
             }
         }
 
@@ -381,6 +326,7 @@
                     if (lowerCaseName.endsWith('.heic') || lowerCaseName.endsWith('.heif')) {
                         processingIndicator.querySelector('p').textContent = `Mengonversi ${file.name}...`;
                         const convertedBlob = await heic2any({ blob: file, toType: "image/png" });
+                        // Membuat File baru dari Blob yang sudah dikonversi
                         const convertedFile = new File([convertedBlob], file.name.replace(/\.(heic|heif)$/i, '.png'), { type: 'image/png' });
                         filesToProcess.push(convertedFile);
                     } else {
@@ -397,18 +343,17 @@
 
             for (let i = 0; i < filesToProcess.length; i++) {
                 const originalFile = filesToProcess[i];
-                let fileWithTransparentBg = null;
+                let fileToProcess = originalFile;
                 
                 try {
                     // 1. Hapus Latar Belakang
                     processingIndicator.querySelector('p').textContent = `Menghapus latar belakang ${originalFile.name}...`;
                     const blobNoBg = await removeBackground(originalFile);
-                    // Gunakan nama file asli (sebelum konversi atau resize)
-                    fileWithTransparentBg = new File([blobNoBg], originalFile.name, { type: 'image/png' });
+                    fileToProcess = new File([blobNoBg], originalFile.name, { type: 'image/png' });
 
                     // 2. Terapkan Background Color & Process Image
                     processingIndicator.querySelector('p').textContent = `Memproses dan memotong ${originalFile.name}...`;
-                    await processImage(originalFile, fileWithTransparentBg, existingImageCount + i, null, selectedBackgroundColor);
+                    await processImage(originalFile, fileToProcess, existingImageCount + i, null, selectedBackgroundColor);
 
                 } catch (error) {
                     console.error(`Gagal memproses file: ${originalFile.name}`, error);
@@ -424,8 +369,7 @@
         });
 
         async function processImage(originalFile, fileWithTransparentBg, index, customCanvas = null, bgColor = selectedBackgroundColor) {
-            // Perbaikan: Ganti fileName menjadi baseFileName untuk menghindari deklarasi ganda.
-            const baseFileName = originalFile.name.substring(0, originalFile.name.lastIndexOf('.')) || originalFile.name;
+            const fileName = originalFile.name.substring(0, originalFile.name.lastIndexOf('.')) || originalFile.name;
             
             const finalBlob = await new Promise((resolve, reject) => {
                 const img = new Image();
@@ -470,46 +414,29 @@
                             canvas.height = height;
                             const cornerRadius = currentWidth * (25 / 300);
 
-                            // 1. Terapkan Masking untuk Rounded Corners
-                            // Tentukan path untuk rounded rectangle
-                            const roundRect = (ctx, x, y, width, height, radius) => {
-                                ctx.beginPath();
-                                ctx.moveTo(x + radius, y);
-                                ctx.lineTo(x + width - radius, y);
-                                ctx.arcTo(x + width, y, x + width, y + radius, radius);
-                                ctx.lineTo(x + width, y + height - radius);
-                                ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
-                                ctx.lineTo(x + radius, y + height);
-                                ctx.arcTo(x, y + height, x, y + height - radius, radius);
-                                ctx.lineTo(x, y + radius);
-                                ctx.arcTo(x, y, x + radius, y, radius);
-                                ctx.closePath();
-                            };
-
-                            // --- Langkah 1: Gambar Latar Belakang dan Konten ke Canvas ---
-                            
-                            // Gambar Latar Belakang Solid
+                            // 1. Gambar Latar Belakang Solid
                             ctx.fillStyle = backgroundColor;
                             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                            // Gambar Konten Gambar (Wajah/Subjek)
-                            // Gambar dari sourceCanvas (sudah di-crop dan transparan)
-                            // Gunakan globalCompositeOperation = 'source-over' untuk menumpuk gambar transparan di atas latar belakang
-                            ctx.globalCompositeOperation = 'source-over'; 
-                            ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, height);
-                            
-                            // --- Langkah 2: Masking Akhir untuk Sudut Membulat ---
-                            
-                            // Gunakan globalCompositeOperation = 'destination-in' untuk membatasi area yang sudah digambar (latar belakang + subjek) 
-                            // hanya di dalam bentuk rounded rectangle.
+                            // 2. Terapkan Masking untuk Rounded Corners
                             ctx.globalCompositeOperation = 'destination-in';
-                            
-                            // Gambar rounded rectangle (mask)
-                            roundRect(ctx, 0, 0, currentWidth, height, cornerRadius);
+                            ctx.beginPath();
+                            ctx.moveTo(cornerRadius, 0);
+                            ctx.lineTo(canvas.width - cornerRadius, 0);
+                            ctx.arcTo(canvas.width, 0, canvas.width, cornerRadius, cornerRadius);
+                            ctx.lineTo(canvas.width, canvas.height - cornerRadius);
+                            ctx.arcTo(canvas.width, canvas.height, canvas.width - cornerRadius, canvas.height, cornerRadius);
+                            ctx.lineTo(cornerRadius, canvas.height);
+                            ctx.arcTo(0, canvas.height, 0, canvas.height - cornerRadius, cornerRadius);
+                            ctx.lineTo(0, cornerRadius);
+                            ctx.arcTo(0, 0, cornerRadius, 0, cornerRadius);
+                            ctx.closePath();
                             ctx.fill();
+                            ctx.globalCompositeOperation = 'source-over'; // Kembalikan ke mode normal
 
-                            // Kembalikan ke mode normal
-                            ctx.globalCompositeOperation = 'source-over'; 
+                            // 3. Gambar Konten Gambar (Wajah/Subjek)
+                            // Gambar dari sourceCanvas (sudah di-crop dan transparan)
+                            ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, height);
                             
                             let blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
 
@@ -521,23 +448,24 @@
                                 canvas.height = smallerHeight;
                                 const smallerRadius = currentWidth * (25/300);
 
-                                // Ulangi proses rendering dengan ukuran yang lebih kecil
-                                
-                                // Gambar Latar Belakang Solid
+                                // Ulangi proses rendering dengan ukuran yang lebih kecil dan warna latar belakang
                                 ctx.fillStyle = backgroundColor;
                                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                                // Gambar Konten Gambar (Wajah/Subjek)
+                                ctx.globalCompositeOperation = 'destination-in';
+                                ctx.beginPath();
+                                ctx.moveTo(smallerRadius, 0);
+                                ctx.lineTo(canvas.width - smallerRadius, 0);
+                                ctx.arcTo(canvas.width, 0, canvas.width, smallerRadius, smallerRadius);
+                                ctx.lineTo(canvas.width, canvas.height - smallerRadius);
+                                ctx.arcTo(canvas.width, canvas.height, canvas.width - smallerRadius, canvas.height, smallerRadius);
+                                ctx.lineTo(smallerRadius, canvas.height);
+                                ctx.arcTo(0, canvas.height, 0, canvas.height - smallerRadius, smallerRadius);
+                                ctx.lineTo(0, smallerRadius);
+                                ctx.arcTo(0, 0, smallerRadius, 0, smallerRadius);
+                                ctx.closePath();
+                                ctx.fill();
                                 ctx.globalCompositeOperation = 'source-over';
                                 ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, smallerHeight);
-                                
-                                // Masking Akhir
-                                ctx.globalCompositeOperation = 'destination-in';
-                                roundRect(ctx, 0, 0, currentWidth, smallerHeight, smallerRadius);
-                                ctx.fill();
-                                
-                                ctx.globalCompositeOperation = 'source-over';
-                                
                                 blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
                             }
                             return blob;
@@ -567,8 +495,7 @@
 
             });
 
-            // Perbaikan: Menggunakan baseFileName yang baru
-            const imageName = `${baseFileName}.png`;
+            const imageName = `${fileName}.png`;
             const existingImageIndex = processedImages.findIndex(p => p.name === imageName);
             
             const newImageState = { 
@@ -582,17 +509,16 @@
             if (existingImageIndex > -1) {
                 // Update image state
                 processedImages[existingImageIndex] = newImageState;
-                const existingContainer = document.querySelector(`.group[data-filename="${newImageState.name}"]`);
+                const existingContainer = document.querySelector(`.group[data-filename="${imageName}"]`);
                 existingContainer.querySelector('img').src = URL.createObjectURL(finalBlob);
             } else {
                 // Add new image state
-                const indexToUse = processedImages.length; // Jika baru, gunakan panjang array saat ini untuk indeks
                 processedImages.push(newImageState); 
                 const previewUrl = URL.createObjectURL(finalBlob);
                 const previewImgContainer = document.createElement('div');
                 previewImgContainer.className = 'relative aspect-[3/4] bg-gray-200 rounded-lg overflow-hidden shadow-md group animate-entry';
-                previewImgContainer.style.animationDelay = `${indexToUse * 50}ms`;
-                previewImgContainer.dataset.filename = newImageState.name;
+                previewImgContainer.style.animationDelay = `${index * 50}ms`;
+                previewImgContainer.dataset.filename = imageName;
                 const previewImg = document.createElement('img');
                 previewImg.src = previewUrl;
                 previewImg.className = 'w-full h-full object-cover';
@@ -740,5 +666,3 @@
     </script>
 </body>
 </html>
-
-
