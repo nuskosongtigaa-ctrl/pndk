@@ -470,29 +470,46 @@
                             canvas.height = height;
                             const cornerRadius = currentWidth * (25 / 300);
 
-                            // 1. Gambar Latar Belakang Solid
+                            // 1. Terapkan Masking untuk Rounded Corners
+                            // Tentukan path untuk rounded rectangle
+                            const roundRect = (ctx, x, y, width, height, radius) => {
+                                ctx.beginPath();
+                                ctx.moveTo(x + radius, y);
+                                ctx.lineTo(x + width - radius, y);
+                                ctx.arcTo(x + width, y, x + width, y + radius, radius);
+                                ctx.lineTo(x + width, y + height - radius);
+                                ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+                                ctx.lineTo(x + radius, y + height);
+                                ctx.arcTo(x, y + height, x, y + height - radius, radius);
+                                ctx.lineTo(x, y + radius);
+                                ctx.arcTo(x, y, x + radius, y, radius);
+                                ctx.closePath();
+                            };
+
+                            // --- Langkah 1: Gambar Latar Belakang dan Konten ke Canvas ---
+                            
+                            // Gambar Latar Belakang Solid
                             ctx.fillStyle = backgroundColor;
                             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                            // 2. Terapkan Masking untuk Rounded Corners
-                            ctx.globalCompositeOperation = 'destination-in';
-                            ctx.beginPath();
-                            ctx.moveTo(cornerRadius, 0);
-                            ctx.lineTo(canvas.width - cornerRadius, 0);
-                            ctx.arcTo(canvas.width, 0, canvas.width, cornerRadius, cornerRadius);
-                            ctx.lineTo(canvas.width, canvas.height - cornerRadius);
-                            ctx.arcTo(canvas.width, canvas.height, canvas.width - cornerRadius, canvas.height, cornerRadius);
-                            ctx.lineTo(cornerRadius, canvas.height);
-                            ctx.arcTo(0, canvas.height, 0, canvas.height - cornerRadius, cornerRadius);
-                            ctx.lineTo(0, cornerRadius);
-                            ctx.arcTo(0, 0, cornerRadius, 0, cornerRadius);
-                            ctx.closePath();
-                            ctx.fill();
-                            ctx.globalCompositeOperation = 'source-over'; // Kembalikan ke mode normal
-
-                            // 3. Gambar Konten Gambar (Wajah/Subjek)
+                            // Gambar Konten Gambar (Wajah/Subjek)
                             // Gambar dari sourceCanvas (sudah di-crop dan transparan)
+                            // Gunakan globalCompositeOperation = 'source-over' untuk menumpuk gambar transparan di atas latar belakang
+                            ctx.globalCompositeOperation = 'source-over'; 
                             ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, height);
+                            
+                            // --- Langkah 2: Masking Akhir untuk Sudut Membulat ---
+                            
+                            // Gunakan globalCompositeOperation = 'destination-in' untuk membatasi area yang sudah digambar (latar belakang + subjek) 
+                            // hanya di dalam bentuk rounded rectangle.
+                            ctx.globalCompositeOperation = 'destination-in';
+                            
+                            // Gambar rounded rectangle (mask)
+                            roundRect(ctx, 0, 0, currentWidth, height, cornerRadius);
+                            ctx.fill();
+
+                            // Kembalikan ke mode normal
+                            ctx.globalCompositeOperation = 'source-over'; 
                             
                             let blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
 
@@ -504,24 +521,23 @@
                                 canvas.height = smallerHeight;
                                 const smallerRadius = currentWidth * (25/300);
 
-                                // Ulangi proses rendering dengan ukuran yang lebih kecil dan warna latar belakang
+                                // Ulangi proses rendering dengan ukuran yang lebih kecil
+                                
+                                // Gambar Latar Belakang Solid
                                 ctx.fillStyle = backgroundColor;
                                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                                ctx.globalCompositeOperation = 'destination-in';
-                                ctx.beginPath();
-                                ctx.moveTo(smallerRadius, 0);
-                                ctx.lineTo(canvas.width - smallerRadius, 0);
-                                ctx.arcTo(canvas.width, 0, canvas.width, smallerRadius, smallerRadius);
-                                ctx.lineTo(canvas.width, canvas.height - smallerRadius);
-                                ctx.arcTo(canvas.width, canvas.height, canvas.width - smallerRadius, canvas.height, smallerRadius);
-                                ctx.lineTo(smallerRadius, canvas.height);
-                                ctx.arcTo(0, canvas.height, 0, canvas.height - smallerRadius, smallerRadius);
-                                ctx.lineTo(0, smallerRadius);
-                                ctx.arcTo(0, 0, smallerRadius, 0, smallerRadius);
-                                ctx.closePath();
-                                ctx.fill();
+
+                                // Gambar Konten Gambar (Wajah/Subjek)
                                 ctx.globalCompositeOperation = 'source-over';
                                 ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, smallerHeight);
+                                
+                                // Masking Akhir
+                                ctx.globalCompositeOperation = 'destination-in';
+                                roundRect(ctx, 0, 0, currentWidth, smallerHeight, smallerRadius);
+                                ctx.fill();
+                                
+                                ctx.globalCompositeOperation = 'source-over';
+                                
                                 blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
                             }
                             return blob;
