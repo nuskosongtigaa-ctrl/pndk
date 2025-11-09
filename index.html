@@ -87,7 +87,12 @@
         }
         #editor-container {
             max-width: 90vw;
-            max-height: 80vh;
+            max-height: 90vh; /* Ditingkatkan untuk menampung kontrol baru */
+        }
+        #image-cropper-area {
+            /* Pastikan area cropping memiliki batas maksimum yang fleksibel */
+            max-height: 70vh;
+            max-width: 100%;
         }
         .cropper-view-box {
             border-radius: 12px; /* Membuat area crop berujung bulat */
@@ -103,6 +108,20 @@
              width: 8px !important;
              height: 8px !important;
              background-color: rgba(255, 255, 255, 0.7) !important;
+        }
+
+        /* Style untuk tombol pilihan warna */
+        .color-option {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .color-option.selected {
+            border-color: #006A4E;
+            box-shadow: 0 0 0 2px white;
         }
 
         /* --- Animasi Loading --- */
@@ -169,9 +188,21 @@
     <!-- Modal untuk Editor Penyesuaian Foto -->
     <div id="editor-modal" class="fixed inset-0 z-50 flex-col items-center justify-center hidden animate-entry">
         <div id="editor-container" class="bg-white p-4 rounded-lg shadow-2xl flex flex-col">
-            <div class="flex-grow w-full h-full">
+            
+            <!-- Area Pilihan Warna Latar Belakang -->
+            <div class="mb-4 flex flex-col sm:flex-row items-center justify-between p-2 rounded-lg bg-gray-100/70">
+                <p class="font-semibold text-gray-700 mb-2 sm:mb-0">Pilih Warna Latar Belakang:</p>
+                <div id="color-options" class="flex space-x-3">
+                    <div id="color-green" class="color-option" style="background-color: #08CB00;" data-color="#08CB00"></div>
+                    <div id="color-red" class="color-option" style="background-color: #BF092F;" data-color="#BF092F"></div>
+                </div>
+            </div>
+
+            <!-- Area Cropping Gambar -->
+            <div id="image-cropper-area" class="flex-grow w-full h-full max-h-full overflow-hidden">
                 <img id="image-to-edit" class="max-w-full max-h-full">
             </div>
+
             <div class="flex justify-center items-center space-x-4 mt-4">
                 <button id="cancel-edit-btn" class="bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-full">Batal</button>
                 <button id="save-edit-btn" class="btn">Simpan Perubahan</button>
@@ -181,10 +212,14 @@
 
 
     <script>
+        // --- Kunci API Clipdrop ---
+        const CLIPDROP_API_KEY = "e04afd71794261bbd1ce68f8cde1786111e9f41abf1d4ad6115d7d991611fc80ec970b750221ad9d01e17aec29f806aa";
+        
         // --- State Management ---
-        let processedImages = []; // Menyimpan { name, blob, originalFile }
+        let processedImages = []; // Menyimpan { name, blob, originalFile, bgColor }
         let cropper = null;
         let currentEditingFile = null;
+        let selectedBackgroundColor = '#08CB00'; // Default: Hijau
 
         // --- DOM Elements ---
         const page1 = document.getElementById('page1');
@@ -201,6 +236,7 @@
         const cancelEditBtn = document.getElementById('cancel-edit-btn');
         const saveEditBtn = document.getElementById('save-edit-btn');
         const notificationArea = document.getElementById('notification-area');
+        const colorOptionsContainer = document.getElementById('color-options');
         
         // --- Fungsi Notifikasi ---
         function showNotification(fileName, reason) {
@@ -229,6 +265,33 @@
             
             closeButton.onclick = removeNotification;
             setTimeout(removeNotification, 5000); // Hapus otomatis setelah 5 detik
+        }
+
+
+        // --- Fungsi Penghapus Latar Belakang (Clipdrop API) ---
+        async function removeBackground(file) {
+            const formData = new FormData();
+            formData.append('image_file', file);
+
+            try {
+                const response = await fetch('https://clipdrop-api.co/remove-background/v1', {
+                    method: 'POST',
+                    headers: {
+                        'x-api-key': CLIPDROP_API_KEY
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Clipdrop API Error: ${response.status} - ${errorText}`);
+                }
+
+                return await response.blob();
+            } catch (error) {
+                console.error("Kesalahan saat memanggil Clipdrop API:", error);
+                throw new Error("Gagal menghapus latar belakang secara otomatis.");
+            }
         }
 
 
@@ -262,6 +325,7 @@
                     if (lowerCaseName.endsWith('.heic') || lowerCaseName.endsWith('.heif')) {
                         processingIndicator.querySelector('p').textContent = `Mengonversi ${file.name}...`;
                         const convertedBlob = await heic2any({ blob: file, toType: "image/png" });
+                        // Membuat File baru dari Blob yang sudah dikonversi
                         const convertedFile = new File([convertedBlob], file.name.replace(/\.(heic|heif)$/i, '.png'), { type: 'image/png' });
                         filesToProcess.push(convertedFile);
                     } else {
@@ -274,16 +338,25 @@
                 }
             }
 
-            processingIndicator.querySelector('p').textContent = 'Memproses gambar...';
             const existingImageCount = processedImages.length;
 
             for (let i = 0; i < filesToProcess.length; i++) {
-                const file = filesToProcess[i];
+                const originalFile = filesToProcess[i];
+                let fileToProcess = originalFile;
+                
                 try {
-                    await processImage(file, existingImageCount + i);
+                    // 1. Hapus Latar Belakang
+                    processingIndicator.querySelector('p').textContent = `Menghapus latar belakang ${originalFile.name}...`;
+                    const blobNoBg = await removeBackground(originalFile);
+                    fileToProcess = new File([blobNoBg], originalFile.name, { type: 'image/png' });
+
+                    // 2. Terapkan Background Color & Process Image
+                    processingIndicator.querySelector('p').textContent = `Memproses dan memotong ${originalFile.name}...`;
+                    await processImage(originalFile, fileToProcess, existingImageCount + i, null, selectedBackgroundColor);
+
                 } catch (error) {
-                    console.error(`Gagal memproses file: ${file.name}`, error);
-                    showNotification(file.name, error.message || "Proses gagal, file mungkin rusak.");
+                    console.error(`Gagal memproses file: ${originalFile.name}`, error);
+                    showNotification(originalFile.name, error.message || "Proses gagal, file mungkin rusak.");
                 }
             }
             
@@ -294,8 +367,8 @@
             fileInput.value = '';
         });
 
-        async function processImage(file, index, customCanvas = null) {
-            const fileName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        async function processImage(originalFile, fileWithTransparentBg, index, customCanvas = null, bgColor = selectedBackgroundColor) {
+            const fileName = originalFile.name.substring(0, originalFile.name.lastIndexOf('.')) || originalFile.name;
             
             const finalBlob = await new Promise((resolve, reject) => {
                 const img = new Image();
@@ -306,8 +379,10 @@
                         let sourceCanvas;
 
                         if (customCanvas) { 
+                            // Jika ada customCanvas (dari Cropper), gunakan itu sebagai sumber
                             sourceCanvas = customCanvas; 
                         } else {
+                            // Jika tidak ada customCanvas, buat canvas baru untuk cropping otomatis (3:4)
                             sourceCanvas = document.createElement('canvas');
                             const ctx = sourceCanvas.getContext('2d');
                             const targetAspectRatio = 3 / 4;
@@ -323,10 +398,12 @@
                             }
                             sourceCanvas.width = sW;
                             sourceCanvas.height = sH;
+                            // Gambar yang digunakan di sini adalah yang sudah dihapus latar belakangnya (fileWithTransparentBg)
                             ctx.drawImage(img, sX, sY, sW, sH, 0, 0, sW, sH);
                         }
 
-                        const renderCanvasOptimized = async (initialWidth) => {
+                        // Fungsi untuk merender, menerapkan warna latar belakang, dan mengoptimalkan ukuran
+                        const renderCanvasOptimized = async (initialWidth, backgroundColor) => {
                             const canvas = document.createElement('canvas');
                             const ctx = canvas.getContext('2d');
                             let currentWidth = initialWidth;
@@ -336,6 +413,12 @@
                             canvas.height = height;
                             const cornerRadius = currentWidth * (25 / 300);
 
+                            // 1. Gambar Latar Belakang Solid
+                            ctx.fillStyle = backgroundColor;
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                            // 2. Terapkan Masking untuk Rounded Corners
+                            ctx.globalCompositeOperation = 'destination-in';
                             ctx.beginPath();
                             ctx.moveTo(cornerRadius, 0);
                             ctx.lineTo(canvas.width - cornerRadius, 0);
@@ -347,17 +430,27 @@
                             ctx.lineTo(0, cornerRadius);
                             ctx.arcTo(0, 0, cornerRadius, 0, cornerRadius);
                             ctx.closePath();
-                            ctx.clip();
+                            ctx.fill();
+                            ctx.globalCompositeOperation = 'source-over'; // Kembalikan ke mode normal
+
+                            // 3. Gambar Konten Gambar (Wajah/Subjek)
+                            // Gambar dari sourceCanvas (sudah di-crop dan transparan)
                             ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, height);
                             
                             let blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
 
+                            // Cek dan Optimasi Ukuran
                             if (blob.size > MAX_SIZE_BYTES) {
                                 currentWidth = 600; 
                                 const smallerHeight = currentWidth / (3 / 4);
                                 canvas.width = currentWidth;
                                 canvas.height = smallerHeight;
                                 const smallerRadius = currentWidth * (25/300);
+
+                                // Ulangi proses rendering dengan ukuran yang lebih kecil dan warna latar belakang
+                                ctx.fillStyle = backgroundColor;
+                                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                ctx.globalCompositeOperation = 'destination-in';
                                 ctx.beginPath();
                                 ctx.moveTo(smallerRadius, 0);
                                 ctx.lineTo(canvas.width - smallerRadius, 0);
@@ -369,14 +462,15 @@
                                 ctx.lineTo(0, smallerRadius);
                                 ctx.arcTo(0, 0, smallerRadius, 0, smallerRadius);
                                 ctx.closePath();
-                                ctx.clip();
+                                ctx.fill();
+                                ctx.globalCompositeOperation = 'source-over';
                                 ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, smallerHeight);
                                 blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
                             }
                             return blob;
                         };
 
-                        const resultBlob = await renderCanvasOptimized(800); 
+                        const resultBlob = await renderCanvasOptimized(800, bgColor); 
                         resolve(resultBlob);
 
                     } catch (error) { 
@@ -388,28 +482,37 @@
                     reject(new Error(`Gagal memuat. Format tidak didukung/file rusak.`));
                 };
                 
-                if (customCanvas) {
-                    img.src = customCanvas.toDataURL();
-                } else {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        img.src = e.target.result;
-                    };
-                    reader.onerror = (e) => {
-                        reject(new Error('Gagal membaca file.'));
-                    };
-                    reader.readAsDataURL(file);
-                }
+                // Gunakan file yang sudah dihapus latar belakangnya
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    img.src = e.target.result;
+                };
+                reader.onerror = (e) => {
+                    reject(new Error('Gagal membaca file.'));
+                };
+                reader.readAsDataURL(fileWithTransparentBg);
+
             });
 
             const imageName = `${fileName}.png`;
             const existingImageIndex = processedImages.findIndex(p => p.name === imageName);
+            
+            const newImageState = { 
+                name: imageName, 
+                blob: finalBlob, 
+                originalFile: originalFile, 
+                bgColor: bgColor,
+                fileWithTransparentBg: fileWithTransparentBg // Simpan versi transparan untuk editing ulang
+            };
+
             if (existingImageIndex > -1) {
-                processedImages[existingImageIndex].blob = finalBlob;
+                // Update image state
+                processedImages[existingImageIndex] = newImageState;
                 const existingContainer = document.querySelector(`.group[data-filename="${imageName}"]`);
                 existingContainer.querySelector('img').src = URL.createObjectURL(finalBlob);
             } else {
-                processedImages.push({ name: imageName, blob: finalBlob, originalFile: file }); 
+                // Add new image state
+                processedImages.push(newImageState); 
                 const previewUrl = URL.createObjectURL(finalBlob);
                 const previewImgContainer = document.createElement('div');
                 previewImgContainer.className = 'relative aspect-[3/4] bg-gray-200 rounded-lg overflow-hidden shadow-md group animate-entry';
@@ -435,12 +538,18 @@
                 previewGallery.appendChild(previewImgContainer);
             }
         }
+        
+        // --- Event Listeners untuk Galeri & Editor ---
         previewGallery.addEventListener('click', (event) => {
             const button = event.target.closest('button');
             if (!button) return;
             const action = button.dataset.action;
             const container = button.closest('.group');
             const filename = container.dataset.filename;
+            const imageToAdjust = processedImages.find(img => img.name === filename);
+
+            if (!imageToAdjust) return;
+
             if (action === 'delete') {
                 processedImages = processedImages.filter(img => img.name !== filename);
                 container.style.transition = 'opacity 0.3s, transform 0.3s';
@@ -453,40 +562,88 @@
                     previewGallery.classList.add('hidden');
                 }
             } else if (action === 'adjust') {
-                const imageToAdjust = processedImages.find(img => img.name === filename);
-                if (imageToAdjust) { openEditor(imageToAdjust); }
+                openEditor(imageToAdjust);
             }
         });
+
+        function selectColor(color) {
+            selectedBackgroundColor = color;
+            document.querySelectorAll('.color-option').forEach(option => {
+                if (option.dataset.color === color) {
+                    option.classList.add('selected');
+                } else {
+                    option.classList.remove('selected');
+                }
+            });
+        }
+
+        colorOptionsContainer.addEventListener('click', (event) => {
+            const option = event.target.closest('.color-option');
+            if (option) {
+                selectColor(option.dataset.color);
+            }
+        });
+
+
         function openEditor(imageFile) {
             currentEditingFile = imageFile;
-            imageToEdit.src = URL.createObjectURL(imageFile.originalFile);
+            // Gunakan file dengan background transparan untuk proses cropping
+            imageToEdit.src = URL.createObjectURL(imageFile.fileWithTransparentBg); 
+            
+            // Set warna yang dipilih saat ini ke warna yang terakhir digunakan untuk foto ini
+            selectColor(imageFile.bgColor);
+
             editorModal.classList.remove('hidden');
             editorModal.classList.add('flex');
-            cropper = new Cropper(imageToEdit, { aspectRatio: 3 / 4, viewMode: 2, autoCropArea: 1, movable: true, zoomable: true, rotatable: false, scalable: false });
+
+            // Set up Cropper
+            cropper = new Cropper(imageToEdit, { 
+                aspectRatio: 3 / 4, 
+                viewMode: 2, 
+                autoCropArea: 1, 
+                movable: true, 
+                zoomable: true, 
+                rotatable: false, 
+                scalable: false 
+            });
         }
+        
         function closeEditor() {
             if (cropper) { cropper.destroy(); cropper = null; }
             currentEditingFile = null;
             editorModal.classList.add('hidden');
             editorModal.classList.remove('flex');
         }
+
         cancelEditBtn.addEventListener('click', closeEditor);
+
         saveEditBtn.addEventListener('click', async () => {
             if (!cropper || !currentEditingFile) return;
-            const fileToProcess = currentEditingFile.originalFile;
+
+            const originalFile = currentEditingFile.originalFile;
+            const fileWithTransparentBg = currentEditingFile.fileWithTransparentBg;
+            const currentBgColor = selectedBackgroundColor;
             const croppedCanvas = cropper.getCroppedCanvas();
+            
             closeEditor();
+
             processingIndicator.classList.remove('hidden');
+            processingIndicator.querySelector('p').textContent = `Menyimpan perubahan ${originalFile.name}...`;
             downloadBtn.disabled = true;
+
             try {
-                await processImage(fileToProcess, 0, croppedCanvas);
+                // Proses ulang gambar dengan canvas yang sudah di-crop dan warna latar belakang yang baru
+                await processImage(originalFile, fileWithTransparentBg, 0, croppedCanvas, currentBgColor);
+
             } catch (error) {
                 console.error("Gagal menyimpan perubahan:", error);
-                showNotification(fileToProcess.name, error.message || "Gagal menyimpan perubahan.");
+                showNotification(originalFile.name, error.message || "Gagal menyimpan perubahan.");
             }
+
             processingIndicator.classList.add('hidden');
             if (processedImages.length > 0) downloadBtn.disabled = false;
         });
+
         downloadBtn.addEventListener('click', async () => {
             if (processedImages.length === 0) return;
             if (processedImages.length === 1) { saveAs(processedImages[0].blob, processedImages[0].name); return; }
@@ -499,7 +656,12 @@
             downloadBtn.disabled = false;
             downloadBtn.textContent = 'Unduh Foto';
         });
+
+        // Inisialisasi: pilih warna default saat dimuat
+        document.addEventListener('DOMContentLoaded', () => {
+            selectColor(selectedBackgroundColor);
+        });
+
     </script>
 </body>
 </html>
-
