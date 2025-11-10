@@ -214,7 +214,7 @@
     <script>
         // --- Kunci API Remove.bg ---
         // Kunci API yang sudah Anda masukkan: 85FduUf8PS6oeiTGrRGd5psP
-        const REMOVEBG_API_KEY = "RyyPpqCaNoJUEYNXCkGuRtL6"; 
+        const REMOVEBG_API_KEY = "yCMdxdToTd3Njsbju7d5TnCV"; 
         
         // Batas ukuran file (Remove.bg merekomendasikan di bawah 12MB)
         const MAX_FILE_SIZE_MB = 10; 
@@ -439,12 +439,12 @@
                         const renderCanvasOptimized = async (initialWidth, backgroundColor) => {
                             const canvas = document.createElement('canvas');
                             const ctx = canvas.getContext('2d');
-                            let currentWidth = initialWidth;
+                            let currentWidth = initialWidth | 0; // Perbaikan: Paksa jadi integer
                             
-                            const height = currentWidth / (3 / 4);
+                            const height = (currentWidth / (3 / 4)) | 0; // Perbaikan: Paksa jadi integer (truncate)
                             canvas.width = currentWidth;
                             canvas.height = height;
-                            const cornerRadius = currentWidth * (25 / 300);
+                            const cornerRadius = (currentWidth * (25 / 300)) | 0; // Perbaikan: Paksa jadi integer (truncate)
 
                             // 1. Gambar Latar Belakang Solid
                             ctx.fillStyle = backgroundColor;
@@ -475,10 +475,10 @@
                             // Cek dan Optimasi Ukuran
                             if (blob.size > MAX_SIZE_BYTES) {
                                 currentWidth = 600; 
-                                const smallerHeight = currentWidth / (3 / 4);
+                                const smallerHeight = (currentWidth / (3 / 4)) | 0; // Perbaikan: Paksa jadi integer (truncate)
                                 canvas.width = currentWidth;
                                 canvas.height = smallerHeight;
-                                const smallerRadius = currentWidth * (25/300);
+                                const smallerRadius = (currentWidth * (25/300)) | 0; // Perbaikan: Paksa jadi integer (truncate)
 
                                 // Ulangi proses rendering dengan ukuran yang lebih kecil dan warna latar belakang
                                 ctx.fillStyle = backgroundColor;
@@ -699,4 +699,3 @@
     </script>
 </body>
 </html>
-
