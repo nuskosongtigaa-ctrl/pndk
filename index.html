@@ -450,7 +450,11 @@
                             ctx.fillStyle = backgroundColor;
                             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                            // 2. Terapkan Masking untuk Rounded Corners
+                            // 2. Gambar Konten Gambar (Wajah/Subjek)
+                            // Gambar dari sourceCanvas (sudah di-crop dan transparan)
+                            ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, height);
+                            
+                            // 3. Terapkan Masking untuk Rounded Corners (SETELAH gambar ditambahkan)
                             ctx.globalCompositeOperation = 'destination-in';
                             ctx.beginPath();
                             ctx.moveTo(cornerRadius, 0);
@@ -465,10 +469,6 @@
                             ctx.closePath();
                             ctx.fill();
                             ctx.globalCompositeOperation = 'source-over'; // Kembalikan ke mode normal
-
-                            // 3. Gambar Konten Gambar (Wajah/Subjek)
-                            // Gambar dari sourceCanvas (sudah di-crop dan transparan)
-                            ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, height);
                             
                             let blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
 
@@ -481,8 +481,14 @@
                                 const smallerRadius = (currentWidth * (25/300)) | 0; // Perbaikan: Paksa jadi integer (truncate)
 
                                 // Ulangi proses rendering dengan ukuran yang lebih kecil dan warna latar belakang
+                                // 1. Gambar Latar Belakang Solid
                                 ctx.fillStyle = backgroundColor;
                                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                                // 2. Gambar Konten Gambar (Wajah/Subjek)
+                                ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, smallerHeight);
+
+                                // 3. Terapkan Masking untuk Rounded Corners
                                 ctx.globalCompositeOperation = 'destination-in';
                                 ctx.beginPath();
                                 ctx.moveTo(smallerRadius, 0);
@@ -497,7 +503,6 @@
                                 ctx.closePath();
                                 ctx.fill();
                                 ctx.globalCompositeOperation = 'source-over';
-                                ctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 0, 0, currentWidth, smallerHeight);
                                 blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
                             }
                             return blob;
